@@ -567,7 +567,7 @@ line."
       (skip-syntax-forward " " eol)
       (point))))
 
-(defun scala-syntax:looking-at-varid-p (&optional point)
+(defun scala-syntax:looking-at-varid (&optional point)
   "Return true if looking-at varid, and it is not the start of a
 stableId"
   (save-excursion
@@ -822,5 +822,53 @@ not. A list must be either enclosed in parentheses or start with
               (scala-syntax:backward-sexp)))
           (when (looking-at scala-syntax:list-keywords-re)
             (goto-char (match-end 0))))))))
+
+(defun scala-syntax:forward-pattern2 ()
+  "Skip forward over a pattern2"
+  (save-match-data
+    (scala-syntax:skip-forward-ignorable)
+    (when (and (not (or (eobp)
+                        (looking-at scala-syntax:other-keywords-unsafe-re)
+                        (scala-syntax:looking-at-reserved-symbol nil)))
+                (scala-syntax:looking-at-simplePattern-beginning))
+      (if (not (scala-syntax:looking-at-varid))
+          (scala-syntax:forward-pattern3)
+        (goto-char (match-end 0))
+        (when (save-excursion
+                (scala-syntax:skip-forward-ignorable)
+                (looking-at "@"))
+          (goto-char (match-end 0))
+          (scala-syntax:forward-pattern3))))))
+
+(defun scala-syntax:forward-pattern3 ()
+  "Skip forward over a pattern3"
+  (save-match-data
+    (scala-syntax:skip-forward-ignorable)
+               
+        
+;        (message "- now at %d" (point))
+    (if (= (char-after) ?\()
+            (forward-list)
+          ;; else
+          (goto-char (match-end 0))
+          (scala-syntax:skip-forward-ignorable)
+;          (message "+ now at %d" (point))
+          (cond ((looking-at "(")
+                 (forward-list))
+                ((looking-at "@")
+                 (goto-char (match-end 0)))
+                ((or (scala-syntax:looking-at-reserved-symbol nil)
+                     (looking-at scala-syntax:other-keywords-unsafe-re))
+;                 (messssage "saw reserved symbol or keyword")
+                 nil)
+                ((looking-at scala-syntax:id-re)
+;                 (message "saw id-re %d" (match-beginning 0))
+                 (goto-char (match-end 0)))
+;                (t
+;                 (message "nothing special here %s" (point)))
+                ))
+        (scala-syntax:skip-forward-ignorable)))
+;    (message "limit at %s" (point))
+    (point)))
 
 (provide 'scala-mode2-syntax)

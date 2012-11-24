@@ -4,6 +4,14 @@
 
 (require 'scala-mode2-syntax)
 
+(defface scala-font-lock:var-face
+  '((t (:inherit font-lock-warning-face)))
+  "Font Lock mode face used to highlight scala variable names."
+  :group 'scala)
+
+(defvar scala-font-lock:var-face 'scala-font-lock:var-face
+  "Face for scala variable names.")
+
 (defcustom scala-font-lock:constant-list '()
   "A list of strigs that should be fontified in constant
 face. This customization property takes effect only after the
@@ -111,7 +119,7 @@ Does not continue past limit.
 ;    (message "stableId")
     (let ((beg (match-beginning 0))
           (end (match-end 0))
-          (varid (scala-syntax:looking-at-varid-p)))
+          (varid (scala-syntax:looking-at-varid)))
       (goto-char end)
       (let ((new-match-data
              (cond
@@ -490,14 +498,5 @@ Does not continue past limit.
       ;; scaladoc (starts with /** only)
       font-lock-doc-face
     (if (nth 3 state) font-lock-string-face font-lock-comment-face)))
-
-(defface scala-font-lock:var-face
-  '((t (:inherit font-lock-warning-face)))
-  "Font Lock mode face used to highlight scala variable names."
-  :group 'scala)
-
-(defvar scala-font-lock:var-face 'scala-font-lock:var-face
-  "Face for scala variable names.")
-
 
 (provide 'scala-mode2-fontlock)
