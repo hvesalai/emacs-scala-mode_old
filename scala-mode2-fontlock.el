@@ -115,11 +115,11 @@ Does not continue past limit.
    ((scala-syntax:looking-at-reserved-symbol nil)
 ;    (message "symbol")
     nil)
-   ((scala-syntax:looking-at-stableIdOrPath)
+   ((scala-syntax:looking-at-path 2)
 ;    (message "stableId")
     (let ((beg (match-beginning 0))
           (end (match-end 0))
-          (varid (scala-syntax:looking-at-varid)))
+          (varid (scala-syntax:looking-at-path 5)))
       (goto-char end)
       (let ((new-match-data
              (cond
@@ -142,7 +142,7 @@ Does not continue past limit.
         (cond
          ((and (not (or (scala-syntax:looking-at-reserved-symbol nil)
                         (scala-syntax:looking-at-reserved-symbol "|")))
-               (scala-syntax:looking-at-stableIdOrPath))
+               (scala-syntax:looking-at-path 2))
           (setq new-match-data
                 (append (butlast new-match-data 2)
                         `(,(match-beginning 0)
@@ -283,7 +283,7 @@ Does not continue past limit.
              (looking-at scala-syntax:id-re))
         (goto-char (match-end 0)) nil))
    ;; color paths (including stableid)
-   ((scala-syntax:looking-at-stableIdOrPath t)
+   ((scala-syntax:looking-at-path)
 ;    (message "at path")
     (let ((end (match-end 0)))
       (goto-char end)

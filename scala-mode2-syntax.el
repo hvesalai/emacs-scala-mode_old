@@ -168,55 +168,86 @@
 ;;   (concat "\\(" scala-syntax:stableId-re
 ;;           "\\|" "\\(" scala-syntax:id-re "\\." "\\)?" "this" "\\)"))
 
-(defun scala-syntax:looking-at-super ()
-  (save-excursion
-    (when (looking-at "\\<super\\>")
-      (let ((beg (match-beginning 0)))
-        (when (and (goto-char (match-end 0))
-                   (or (when (= (char-after) ?.)
-                         (forward-char)
-                         t)
-                       (and (when (and (not (eobp)) (= (char-after) ?\[))
-                              (forward-char)
-                              t)
-                            (progn (scala-syntax:skip-forward-ignorable)
-                                   (looking-at scala-syntax:id-re))
-                            (progn (goto-char (match-end 0))
-                                   (scala-syntax:skip-forward-ignorable)
-                                   (when (and (not (eobp)) (= (char-after) ?\]))
-                                     (forward-char)
-                                     t))
-                            (when (and (not (eobp)) (= (char-after) ?.))
-                              (forward-char)
-                              t)))
-                   (looking-at scala-syntax:id-re))
-          (set-match-data `(,beg ,(match-end 0)))
-          t)))))
+(defun scala-syntax:parse-path (&optional beg parser-state)
+  "Parses a path begining at the current point or 'beg' if
+given. Returns the type of path found or nil if no path was
+found. 
 
-(defun scala-syntax:looking-at-stableIdOrPath (&optional path-p beg)
+If a path is found, the return value is one of:
+- 1: Path
+- 2: StableId
+- 3: StableId with super
+- 4: id
+- 5: varid
+
+After the function returns, the point is where parsing stopped."
+;; parser-state is a list with:
+;; - end of previous path part (not including punctuation)
+;; - type of previous part
+;; - start of the path
   (unless beg (setq beg (point)))
-  (save-excursion
-    (cond ((looking-at "\\<this\\>")
-           (goto-char (match-end 0))
-           (if (and (not (eobp)) (= (char-after) ?.))
-               (progn (forward-char)
-                      (scala-syntax:looking-at-stableIdOrPath path-p beg))
-             path-p))
-          ((or (scala-syntax:looking-at-super)
-               (and (not (or (looking-at scala-syntax:keywords-unsafe-re)
-                             (scala-syntax:looking-at-reserved-symbol nil)))
-                    (looking-at scala-syntax:id-re)))
-           (goto-char (match-end 0))
-           (if (and (not (eobp)) (= (char-after) ?.))
-               (progn (forward-char)
-                      (scala-syntax:looking-at-stableIdOrPath path-p beg))
-             (set-match-data `(,beg ,(match-end 0)))
-             (point))))))
+  (goto-char beg)
+  (scala-syntax:skip-forward-ignorable)
+  (unless parser-state (setq parser-state (list beg nil (point))))
+  (let ((new-state 
+         (cond ((or (eobp)
+                    (looking-at scala-syntax:other-keywords-unsafe-re)
+                    (looking-at scala-syntax:value-keywords-unsafe-re)
+                    (scala-syntax:looking-at-reserved-symbol nil))
+                ;; not a path part, don't modify state
+                nil)
+               ((looking-at "\\<super\\>")
+                ;; 'super' keywords seen, check current state (must be
+                ;; at least id) and skip ClassQualifier if seen
+                (if (and (nth 1 parser-state) (> 4 (nth 1 parser-state)))
+                    nil
+                  (let ((end
+                         (save-excursion
+                           (goto-char (match-end 0))
+                           (or (save-excursion
+                                 (when (and (scala-syntax:looking-at "\\[")
+                                            (goto-char (match-end 0))
+                                            (scala-syntax:looking-at scala-syntax:id-re)
+                                            (goto-char (match-end 0))
+                                            (scala-syntax:looking-at "\\]")
+                                            (goto-char (match-end 0)))
+                                   (point)))
+                               (point)))))
+                    (list end 3 (nth 2 parser-state)))))
+               ((looking-at "\\<this\\>")
+                ;; 'this' keyword seen, check current state (must only
+                ;; be at least id)
+                (if (and (nth 1 parser-state) (> 4 (nth 1 parser-state)))
+                    nil
+                  (list (match-end 0) 1 (nth 2 parser-state))))
+               ((looking-at scala-syntax:id-re)
+                ;; id seen, current state may be anything
+                (list (match-end 0)
+                      (cond ((nth 1 parser-state) 2)
+                            ((let ((case-fold-search nil))
+                               (looking-at scala-syntax:varid-re)) 5)
+                            (4))
+                      (nth 2 parser-state))))))
+
+    (goto-char (car (or new-state parser-state)))
+    (set-match-data (list (nth 2 (or new-state parser-state)) (point)))
+
+    (cond ((not new-state) (nth 1 parser-state))
+          ((scala-syntax:looking-at "\\.") (scala-syntax:parse-path (match-end 0) new-state))
+          ((nth 1 new-state)))))
+
+(defun scala-syntax:looking-at-path (&optional min-level)
+  "Return t if looking at a path of at least level MIN-LEVEL. For
+the levels, see `scala-syntax:parse-path'."
+  (save-excursion 
+    (let ((state (scala-syntax:parse-path)))
+      (and state (or (not min-level)
+                     (>= state min-level))))))
 
 (defun scala-syntax:looking-at-simplePattern-beginning ()
   (or (looking-at "[_(]")
       (looking-at scala-syntax:literal-re)
-      (scala-syntax:looking-at-stableIdOrPath)))
+      (scala-syntax:looking-at-path)))
 
 
 (defun scala-syntax:regexp-for-id (id)
@@ -567,20 +598,6 @@ line."
       (skip-syntax-forward " " eol)
       (point))))
 
-(defun scala-syntax:looking-at-varid (&optional point)
-  "Return true if looking-at varid, and it is not the start of a
-stableId"
-  (save-excursion
-    (when point (goto-char point))
-    (scala-syntax:skip-forward-ignorable)
-    (let ((case-fold-search nil))
-      (when (looking-at scala-syntax:varid-re)
-        (save-match-data
-          (if (or (= (char-after (match-end 0)) ?.)
-                  (looking-at "\\<\\(this\\|super\\)\\>"))
-              nil
-            t))))))
-
 (defun scala-syntax:looking-at-empty-line-p ()
   (save-excursion
     (or (bolp)
@@ -633,12 +650,18 @@ over. Returns the number of points moved (will be negative)."
     (skip-syntax-backward " " (line-beginning-position))))
 
 (defun scala-syntax:looking-at (re)
-  "Return the end position of the matched re, if the current
-position is followed by it, or nil if not. All ignorable comments
-and whitespace are skipped before matching."
+  "Like looking-at, but all ignorable comments and whitespace are
+skipped before matching."
   (save-excursion
     (scala-syntax:skip-forward-ignorable)
     (looking-at re)))
+
+(defun scala-syntax:looking-at-p (re)
+  "Like looking-at-p, but all ignorable comments and whitespace
+are skipped before matching."
+  (save-excursion
+    (scala-syntax:skip-forward-ignorable)
+    (looking-at-p re)))
 
 (defun scala-syntax:looking-back-token (re &optional max-chars)
   "Return the start position of the token matched by re, if the
@@ -822,53 +845,5 @@ not. A list must be either enclosed in parentheses or start with
               (scala-syntax:backward-sexp)))
           (when (looking-at scala-syntax:list-keywords-re)
             (goto-char (match-end 0))))))))
-
-(defun scala-syntax:forward-pattern2 ()
-  "Skip forward over a pattern2"
-  (save-match-data
-    (scala-syntax:skip-forward-ignorable)
-    (when (and (not (or (eobp)
-                        (looking-at scala-syntax:other-keywords-unsafe-re)
-                        (scala-syntax:looking-at-reserved-symbol nil)))
-                (scala-syntax:looking-at-simplePattern-beginning))
-      (if (not (scala-syntax:looking-at-varid))
-          (scala-syntax:forward-pattern3)
-        (goto-char (match-end 0))
-        (when (save-excursion
-                (scala-syntax:skip-forward-ignorable)
-                (looking-at "@"))
-          (goto-char (match-end 0))
-          (scala-syntax:forward-pattern3))))))
-
-(defun scala-syntax:forward-pattern3 ()
-  "Skip forward over a pattern3"
-  (save-match-data
-    (scala-syntax:skip-forward-ignorable)
-               
-        
-;        (message "- now at %d" (point))
-    (if (= (char-after) ?\()
-            (forward-list)
-          ;; else
-          (goto-char (match-end 0))
-          (scala-syntax:skip-forward-ignorable)
-;          (message "+ now at %d" (point))
-          (cond ((looking-at "(")
-                 (forward-list))
-                ((looking-at "@")
-                 (goto-char (match-end 0)))
-                ((or (scala-syntax:looking-at-reserved-symbol nil)
-                     (looking-at scala-syntax:other-keywords-unsafe-re))
-;                 (messssage "saw reserved symbol or keyword")
-                 nil)
-                ((looking-at scala-syntax:id-re)
-;                 (message "saw id-re %d" (match-beginning 0))
-                 (goto-char (match-end 0)))
-;                (t
-;                 (message "nothing special here %s" (point)))
-                ))
-        (scala-syntax:skip-forward-ignorable)))
-;    (message "limit at %s" (point))
-    (point)))
 
 (provide 'scala-mode2-syntax)
