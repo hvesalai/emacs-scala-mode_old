@@ -225,7 +225,7 @@ After the function returns, the point is where parsing stopped."
                 (list (match-end 0)
                       (cond ((nth 1 parser-state) 2)
                             ((let ((case-fold-search nil))
-                               (looking-at scala-syntax:varid-re)) 5)
+                               (looking-at (concat "[" scala-syntax:lower-group "]"))) 5)
                             (4))
                       (nth 2 parser-state))))))
 
@@ -845,5 +845,49 @@ not. A list must be either enclosed in parentheses or start with
               (scala-syntax:backward-sexp)))
           (when (looking-at scala-syntax:list-keywords-re)
             (goto-char (match-end 0))))))))
+
+(defun scala-syntax:forward-simplePattern (&optional start)
+  "Forward over a simple type starting at the current position,
+or START. Also skips over any ignorable whitespace and comments
+before the simplePattern. Return end point if a simplePattern was
+found."
+  (when start (goto-char start))
+  (scala-syntax:skip-forward-ignorable)
+  (if (or (looking-at "_")
+          (looking-at scala-syntax:literal-re))
+      (goto-char (match-end 0))
+    (setq start (point))
+    (when (scala-syntax:looking-at-path 2)
+      (goto-char (match-end 0)))
+    (scala-syntax:skip-forward-ignorable)
+    (when (eq (char-after ?\())
+      (ignore-errors (forward-list)))
+    (when (> (point) start)
+      (point))))
+
+(defun scala-syntax:forward-pattern3 (&optional start)
+  "Forward over a Pattern3 starting at the current position,
+or START. Also skips over any ignorable whitespace and comments
+before the simplePattern. Return end point if a Pattern3 was
+found."
+  (when (scala-syntax:forward-simplePattern start)
+    (if (save-excursion
+          (and (scala-syntax:looking-at-path 4)
+               (scala-syntax:forward-simplePattern (match-end 0))))
+        (scala-syntax:forward-pattern3)
+      (point))))
+      
+(defun scala-syntax:forward-pattern2 (&optional start)
+  "Forward over a Pattern2 starting at the current position,
+or START. Also skips over any ignorable whitespace and comments
+before the simplePattern. Return end point if a Pattern2 was
+found."
+  (when start (goto-char start))
+  (when (save-excursion 
+          (and (scala-syntax:looking-at-path 5)
+               (goto-char (match-end 0))
+               (scala-syntax:looking-at-reserved-symbol "@")))
+    (goto-char (match-end 0)))
+  (scala-syntax:forward-pattern3))
 
 (provide 'scala-mode2-syntax)
