@@ -847,7 +847,7 @@ not. A list must be either enclosed in parentheses or start with
             (goto-char (match-end 0))))))))
 
 (defun scala-syntax:forward-simplePattern (&optional start)
-  "Forward over a simple type starting at the current position,
+  "Forward over a simplePattern starting at the current position,
 or START. Also skips over any ignorable whitespace and comments
 before the simplePattern. Return end point if a simplePattern was
 found."
