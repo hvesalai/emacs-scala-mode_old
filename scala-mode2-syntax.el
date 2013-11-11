@@ -168,17 +168,26 @@
 ;;   (concat "\\(" scala-syntax:stableId-re
 ;;           "\\|" "\\(" scala-syntax:id-re "\\." "\\)?" "this" "\\)"))
 
+(defun scala-syntax:path-type-ordinal (type)
+  "Return an ordinal for the given path type symbol ranging from
+'path = 1 and 'varid = 5."
+  (cond ((eq type 'path) 1)
+        ((eq type 'stableId) 2)
+        ((eq type 'super) 3)
+        ((eq type 'id) 4)
+        ((eq type 'varid) 5)))
+
 (defun scala-syntax:parse-path (&optional beg parser-state)
   "Parses a path begining at the current point or 'beg' if
 given. Returns the type of path found or nil if no path was
 found. 
 
 If a path is found, the return value is one of:
-- 1: Path
-- 2: StableId
-- 3: StableId with super
-- 4: id
-- 5: varid
+'path
+'stableId
+'super
+'id
+'varid
 
 After the function returns, the point is where parsing stopped."
 ;; parser-state is a list with:
@@ -199,7 +208,7 @@ After the function returns, the point is where parsing stopped."
                ((looking-at "\\<super\\>")
                 ;; 'super' keywords seen, check current state (must be
                 ;; at least id) and skip ClassQualifier if seen
-                (if (and (nth 1 parser-state) (> 4 (nth 1 parser-state)))
+                (if (scala-syntax:id-p parser-state)
                     nil
                   (let ((end
                          (save-excursion
@@ -213,20 +222,20 @@ After the function returns, the point is where parsing stopped."
                                             (goto-char (match-end 0)))
                                    (point)))
                                (point)))))
-                    (list end 3 (nth 2 parser-state)))))
+                    (list end 'super (nth 2 parser-state)))))
                ((looking-at "\\<this\\>")
                 ;; 'this' keyword seen, check current state (must only
                 ;; be at least id)
-                (if (and (nth 1 parser-state) (> 4 (nth 1 parser-state)))
+                (if (scala-syntax:id-p parser-state)
                     nil
-                  (list (match-end 0) 1 (nth 2 parser-state))))
+                  (list (match-end 0) 'path (nth 2 parser-state))))
                ((looking-at scala-syntax:id-re)
                 ;; id seen, current state may be anything
                 (list (match-end 0)
-                      (cond ((nth 1 parser-state) 2)
+                      (cond ((nth 1 parser-state) 'stableId)
                             ((let ((case-fold-search nil))
-                               (looking-at (concat "[" scala-syntax:lower-group "]"))) 5)
-                            (4))
+                               (looking-at (concat "[" scala-syntax:lower-group "]"))) 'varid)
+                            ('id))
                       (nth 2 parser-state))))))
 
     (goto-char (car (or new-state parser-state)))
@@ -236,13 +245,19 @@ After the function returns, the point is where parsing stopped."
           ((scala-syntax:looking-at "\\.") (scala-syntax:parse-path (match-end 0) new-state))
           ((nth 1 new-state)))))
 
-(defun scala-syntax:looking-at-path (&optional min-level)
+(defun scala-syntax:id-p (parser-state)
+  (let ((type (unless (null parser-state) (nth 1 parser-state))))
+    (or (eq 'id type) (eq 'varid type))))
+
+(defun scala-syntax:looking-at-path (&optional min-ordinal)
   "Return t if looking at a path of at least level MIN-LEVEL. For
-the levels, see `scala-syntax:parse-path'."
+the levels, see `scala-syntax:parse-path' and
+`scala-syntax:path-type-ordinal'."
   (save-excursion 
-    (let ((state (scala-syntax:parse-path)))
-      (and state (or (not min-level)
-                     (>= state min-level))))))
+    (let ((type (scala-syntax:parse-path)))
+      (and type (or (null min-ordinal)
+                     (>= (scala-syntax:path-type-ordinal type)
+                         (scala-syntax:path-type-ordinal min-ordinal)))))))
 
 (defun scala-syntax:looking-at-simplePattern-beginning ()
   (or (looking-at "[_(]")
@@ -857,7 +872,7 @@ found."
           (looking-at scala-syntax:literal-re))
       (goto-char (match-end 0))
     (setq start (point))
-    (when (scala-syntax:looking-at-path 2)
+    (when (scala-syntax:looking-at-path 'stableId)
       (goto-char (match-end 0)))
     (scala-syntax:skip-forward-ignorable)
     (when (eq (char-after ?\())
@@ -872,7 +887,7 @@ before the simplePattern. Return end point if a Pattern3 was
 found."
   (when (scala-syntax:forward-simplePattern start)
     (if (save-excursion
-          (and (scala-syntax:looking-at-path 4)
+          (and (scala-syntax:looking-at-path 'id)
                (scala-syntax:forward-simplePattern (match-end 0))))
         (scala-syntax:forward-pattern3)
       (point))))
@@ -884,7 +899,7 @@ before the simplePattern. Return end point if a Pattern2 was
 found."
   (when start (goto-char start))
   (when (save-excursion 
-          (and (scala-syntax:looking-at-path 5)
+          (and (scala-syntax:looking-at-path 'varid)
                (goto-char (match-end 0))
                (scala-syntax:looking-at-reserved-symbol "@")))
     (goto-char (match-end 0)))
