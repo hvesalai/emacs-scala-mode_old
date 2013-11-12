@@ -268,7 +268,7 @@ Does not continue past limit.
          scala-syntax:double-arrow-unsafe-re)
         (scala-syntax:looking-at-reserved-symbol
          "<[:%]\\|>?:")
-        (looking-at "\\<forSome\\>"))
+        (looking-at "\\_<forSome\\>"))
 ;    (message "skipping reserved")
     (goto-char (match-end 0))
     (scala-syntax:skip-forward-ignorable)
@@ -336,7 +336,7 @@ Does not continue past limit.
     (,(scala-font-lock:create-user-constant-re) 0 font-lock-constant-face)
 
     ;; Annotations
-    (, (rx (and "@" (in "a-zA-Z_.") (0+ (in "a-zA-Z0-9_."))))
+    (,(rx (and "@" (in "a-zA-Z_.") (0+ (in "a-zA-Z0-9_."))))
      . font-lock-preprocessor-face)
 
     ;; reserved symbols
@@ -351,20 +351,34 @@ Does not continue past limit.
     ;; escapes inside strings
     (scala-font-lock:mark-string-escapes (0 font-lock-constant-face prepend nil))
 
-    ;; object
-    (,(concat "\\<object[ \t]+\\("
+    ;; `object'
+    (,(concat "\\_<object[ \t]+\\("
               scala-syntax:id-re
               "\\)")
      1 font-lock-constant-face)
 
-    ;; class, trait, object
-    (,(concat "\\<\\(class\\|trait\\)[ \t]+\\("
+    ;; `class', `trait', `extends', `new' or `with' followed by type
+    (,(concat "\\_<\\(?:class\\|trait\\|extends\\|with\\|new\\)[ \t]+\\("
               scala-syntax:id-re
               "\\)")
-     2 font-lock-type-face)
+     1 font-lock-type-face)
+
+    ;; `package' name
+    (,(concat "\\_<package[ \t]+\\(\\"
+              "(?:" scala-syntax:varid-re ".\\)*" 
+              scala-syntax:varid-re "\\)")
+     (1 font-lock-string-face))
+
+
+    ;; colon followed by id-re. 
+    ;; TODO: we need to extend the font-lock region to next line when the line ends with :
+    (,(concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
+              "\\(?::\\)[ \t\n]*"
+              "\\(" scala-syntax:after-reserved-symbol-re scala-syntax:id-re "\\)")
+     1 font-lock-type-face)
 
     ;; ;; extends, with, new
-    ;; (,(concat "\\<\\(extends\\|with\\|new\\)[ \t]+\\([("
+    ;; (,(concat "\\_<\\(extends\\|with\\|new\\)[ \t]+\\([("
     ;;           scala-syntax:id-first-char-group "]\\)")
     ;;  (scala-font-lock:mark-simpleType (scala-font-lock:limit-simpleType
     ;;                                    (goto-char (match-beginning 2)))
@@ -379,10 +393,10 @@ Does not continue past limit.
     ;;                                   (0 font-lock-type-face nil t)))
 
     ;; def
-    (,(concat "\\<def[ \t]+\\(" scala-syntax:id-re "\\)") 1 font-lock-function-name-face)
+    (,(concat "\\_<def[ \t]+\\(" scala-syntax:id-re "\\)") 1 font-lock-function-name-face)
 
     ;; VarDcl
-    ("\\<val[ \t]+\\([^:]\\)"
+    ("\\_<val[ \t]+\\([^:]\\)"
      (scala-font-lock:mark-pattern1-part (scala-font-lock:limit-pattern2-list
                                           (goto-char (match-beginning 1)))
                                          nil
@@ -390,7 +404,7 @@ Does not continue past limit.
                                          (2 font-lock-constant-face nil t)
                                          (3 font-lock-type-face nil t)))
 
-    ("\\<var[ \t]+\\([^:]\\)"
+    ("\\_<var[ \t]+\\([^:]\\)"
      (scala-font-lock:mark-pattern1-part (scala-font-lock:limit-pattern2-list
                                           (goto-char (match-beginning 1)))
                                          nil
@@ -400,7 +414,7 @@ Does not continue past limit.
                                          ))
 
     ;; case (but not case class|object)
-    ("\\<case[ \t]+\\([^:]\\)"
+    ("\\_<case[ \t]+\\([^:]\\)"
      (scala-font-lock:mark-pattern-part (scala-font-lock:limit-pattern
                                          (goto-char (match-beginning 1)))
                                         nil
@@ -408,80 +422,9 @@ Does not continue past limit.
                                         (2 font-lock-constant-face nil t)
                                         (3 font-lock-type-face nil t)))
 
-    ;; type ascription (: followed by alpha type name)
-    (,(rx
-       (or (not (in "!#%&*+-/:<=>?@\\^|~")) line-start)
-       (group ":")
-       (0+ space)
-       (group (in "a-zA-Z_")
-              (0+ (in "a-zA-Z0-9_"))
-              (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~"))))))
-     (1 font-lock-keyword-face) (2 font-lock-type-face))
-
-    ;; type ascription (: followed by punctuation type name)
-    (,(rx
-       (or (not (in "!#%&*+-/:<=>?@\\^|~")) line-start)
-       (group ":")
-       (1+ space)
-       (group (1+ (in "-!#%&*+/:<=>?@\\^|~"))))
-     (1 font-lock-keyword-face) (2 font-lock-type-face))
-
-    ;; extends followed by type
-    (,(rx symbol-start
-          (group "extends")
-          (1+ space)
-          (group (or
-                   (and (in "a-zA-Z_")
-                        (0+ (in "a-zA-Z0-9_"))
-                        (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-                   (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-      (1 font-lock-keyword-face) (2 font-lock-type-face))
-
-    ;; with followed by type
-    (,(rx symbol-start
-          (group "with")
-          (1+ space)
-          (group (or
-                   (and (in "a-zA-Z_")
-                        (0+ (in "a-zA-Z0-9_"))
-                        (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-                   (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-      (1 font-lock-keyword-face) (2 font-lock-type-face))
-
-    ;; new followed by type
-    (,(rx symbol-start
-          (group "new")
-          (1+ space)
-          (group (or
-                   (and (in "a-zA-Z_")
-                        (0+ (in "a-zA-Z0-9_"))
-                        (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-                   (1+ (in "!#%&*+-/:<=>?@\\^|~")))))
-      (1 font-lock-keyword-face) (2 font-lock-type-face))
-
-    ;; uppercase means a type or object
-    (,(rx symbol-start
-        (and (in "A-Z")
-             (0+ (in "a-zA-Z0-9_"))
-             (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~"))))))
+    ;; all other uppercase names means a constant (object, val or type parameter)
+    (,(concat "\\_<" scala-syntax:capitalid-re "\\_>")
      . font-lock-constant-face)
-    ;; . font-lock-type-face)
-    ; uncomment this to go back to highlighting objects as types
-
-    ;; uppercase
-    (,(rx symbol-start
-          (group
-           (and (in "A-Z")
-                (0+ (in "a-zA-Z0-9_"))
-                (\? (and "_" (1+ (in "!#%&*+-/:<=>?@\\^|~")))))))
-     . font-lock-constant-face)
-
-    ;; package name
-    (,(rx symbol-start
-        (group "package")
-        (1+ space)
-        (group (and (in "a-zA-Z_.") (0+ (in "a-zA-Z0-9_.")))))
-     (1 font-lock-keyword-face) (2 font-lock-string-face))
 
     ;; number literals (have to be here so that other rules take precedence)
     (scala-font-lock:mark-floatingPointLiteral . font-lock-constant-face)

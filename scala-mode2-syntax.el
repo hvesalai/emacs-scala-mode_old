@@ -131,8 +131,8 @@
 (defconst scala-syntax:plainid-re (concat "\\(" scala-syntax:alphaid-re "\\|" scala-syntax:op-re "\\)"))
 ;; stringlit is referred to, but not defined Scala Language Specification 2.9
 ;; we define it as consisting of anything but '`' and newline
-(defconst scala-syntax:stringlit-re "[^`\n\r]")
-(defconst scala-syntax:quotedid-re (concat "`" scala-syntax:stringlit-re "`"))
+(defconst scala-syntax:stringlit-re "[^`\n\r]+")
+(defconst scala-syntax:quotedid-re (concat "[`]" scala-syntax:stringlit-re "[`]"))
 (defconst scala-syntax:id-re (concat "\\(" scala-syntax:plainid-re
                               "\\|" scala-syntax:quotedid-re "\\)"))
 (defconst scala-syntax:id-first-char-group
@@ -205,7 +205,7 @@ After the function returns, the point is where parsing stopped."
                     (scala-syntax:looking-at-reserved-symbol nil))
                 ;; not a path part, don't modify state
                 nil)
-               ((looking-at "\\<super\\>")
+               ((looking-at "\\_<super\\_>")
                 ;; 'super' keywords seen, check current state (must be
                 ;; at least id) and skip ClassQualifier if seen
                 (if (scala-syntax:id-p parser-state)
@@ -223,7 +223,7 @@ After the function returns, the point is where parsing stopped."
                                    (point)))
                                (point)))))
                     (list end 'super (nth 2 parser-state)))))
-               ((looking-at "\\<this\\>")
+               ((looking-at "\\_<this\\_>")
                 ;; 'this' keyword seen, check current state (must only
                 ;; be at least id)
                 (if (scala-syntax:id-p parser-state)
@@ -350,7 +350,7 @@ the levels, see `scala-syntax:parse-path' and
   "\\(=>\\|\u21D2\\)")
 
 (defconst scala-syntax:after-reserved-symbol-re
-  (concat "\\($\\|" scala-syntax:comment-start-re
+  (concat "\\(?:$\\|" scala-syntax:comment-start-re
           "\\|[^" scala-syntax:opchar-group "]\\)"))
 
 (defconst scala-syntax:reserved-symbols-re
@@ -360,10 +360,9 @@ the levels, see `scala-syntax:parse-path' and
           "\\(" scala-syntax:after-reserved-symbol-re "\\)"))
 
 (defconst scala-syntax:colon-re
-  (concat "\\(^\\|[^" scala-syntax:opchar-group "]\\)"
+  (concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
           "\\(:\\)"
-          "\\(" scala-syntax:after-reserved-symbol-re "\\)"))
-
+          "\\(?:" scala-syntax:after-reserved-symbol-re "\\)"))
 
 (defconst scala-syntax:modifiers-re
   (regexp-opt '("override" "abstract" "final" "sealed" "implicit" "lazy"
@@ -381,10 +380,10 @@ the levels, see `scala-syntax:parse-path' and
   "\"\"+\\(\"\\)")
 
 (defconst scala-syntax:case-re
-  "\\<case\\>")
+  "\\_<case\\_>")
 
 (defconst scala-syntax:for-re
-  "\\<for\\>")
+  "\\_<for\\_>")
 
 (defconst scala-syntax:class-or-object-re
   (regexp-opt '("class" "object") 'words))
