@@ -355,7 +355,7 @@ the levels, see `scala-syntax:parse-path' and
 
 (defconst scala-syntax:reserved-symbols-re
   ;; reserved symbols and XML starts ('<!' and '<?')
-  (concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
+  (concat "\\(?:^\\|[^_" scala-syntax:opchar-group "]\\)"
           "\\(" scala-syntax:reserved-symbols-unsafe-re "\\)"
           "\\(?:" scala-syntax:after-reserved-symbol-re "\\)"))
 
