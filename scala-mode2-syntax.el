@@ -47,18 +47,18 @@
 (defconst scala-syntax:hexNumeral-re (concat "0x[" scala-syntax:hexDigit-group "]+"))
 (defconst scala-syntax:octalNumeral-re (concat "0[" scala-syntax:octalDigit-group "]+"))
 (defconst scala-syntax:integerLiteral-re (concat "-?" ;; added from definition of literal
-                                                 "\\(" scala-syntax:hexNumeral-re
+                                                 "\\(?:" scala-syntax:hexNumeral-re
                                                  "\\|" scala-syntax:octalNumeral-re
                                                  "\\|" scala-syntax:decimalNumeral-re
                                                  "\\)[Ll]?"))
 
 
 ;; Floating Point Literal (Chapter 1.3.2)
-(defconst scala-syntax:exponentPart-re (concat "\\([eE][+-]?[" scala-syntax:digit-group "]+\\)"))
+(defconst scala-syntax:exponentPart-re (concat "\\(?:[eE][+-]?[" scala-syntax:digit-group "]+\\)"))
 (defconst scala-syntax:floatType-re "[fFdD]")
 (defconst scala-syntax:floatingPointLiteral-re
   (concat "-?" ;; added from definition of literal
-          "\\([" scala-syntax:digit-group "]+\\.[" scala-syntax:digit-group "]*"
+          "\\(?:[" scala-syntax:digit-group "]+\\.[" scala-syntax:digit-group "]*"
           scala-syntax:exponentPart-re "?" scala-syntax:floatType-re "?"
           "\\|" "\\.[" scala-syntax:digit-group "]+"
           scala-syntax:exponentPart-re "?" scala-syntax:floatType-re "?"
@@ -91,9 +91,9 @@
 
 ;; String Literals (Chapter 1.3.5)
 (defconst scala-syntax:stringElement-re
-  (concat "\\(" "[^\n\"\\\\]"
+  (concat "\\(?:" "[^\n\"\\\\]"
           "\\|" scala-syntax:string-escape-re  "\\)"))
-(defconst scala-syntax:oneLineStringLiteral-re (concat "\\(\"\\)" scala-syntax:stringElement-re "*\\(\"\\)"))
+(defconst scala-syntax:oneLineStringLiteral-re (concat "\\(?:\"\\)" scala-syntax:stringElement-re "*\\(?:\"\\)"))
 (defconst scala-syntax:multiLineStringLiteral-start-re
   "\\(\"\\)\"\"\\(\"?\"?[^\"]\\)*")
 (defconst scala-syntax:multiLineStringLiteral-end-re
@@ -102,7 +102,7 @@
   (concat scala-syntax:multiLineStringLiteral-start-re
           scala-syntax:multiLineStringLiteral-end-re))
 (defconst scala-syntax:stringLiteral-re
-  (concat "\\(" scala-syntax:multiLineStringLiteral-re
+  (concat "\\(?:" scala-syntax:multiLineStringLiteral-re
           "\\|" scala-syntax:oneLineStringLiteral-re "\\)" ))
 
 ;; If you change this or any of the used regex, be sure to
@@ -122,18 +122,18 @@
 (defconst scala-syntax:idrest-re
   ;; Eagerness of regexp causes problems with _. The following is a workaround,
   ;; but the resulting regexp matches only what SLS demands.
-  (concat "\\(" "[_]??" "[" scala-syntax:letter-group scala-syntax:digit-group "]+" "\\)*"
-          "\\(" "_+" scala-syntax:op-re "\\|" "_" "\\)?"))
+  (concat "\\(?:" "[_]??" "[" scala-syntax:letter-group scala-syntax:digit-group "]+" "\\)*"
+          "\\(?:" "_+" scala-syntax:op-re "\\|" "_" "\\)?"))
 (defconst scala-syntax:varid-re (concat "[" scala-syntax:lower-group "]" scala-syntax:idrest-re))
 (defconst scala-syntax:capitalid-re (concat "[" scala-syntax:upperAndUnderscore-group "]" scala-syntax:idrest-re))
 ;; alphaid introduce by SIP11
-(defconst scala-syntax:alphaid-re (concat "\\(" "[" scala-syntax:lower-group scala-syntax:upperAndUnderscore-group "]" scala-syntax:idrest-re "\\)"))
-(defconst scala-syntax:plainid-re (concat "\\(" scala-syntax:alphaid-re "\\|" scala-syntax:op-re "\\)"))
+(defconst scala-syntax:alphaid-re (concat "\\(?:" "[" scala-syntax:lower-group scala-syntax:upperAndUnderscore-group "]" scala-syntax:idrest-re "\\)"))
+(defconst scala-syntax:plainid-re (concat "\\(?:" scala-syntax:alphaid-re "\\|" scala-syntax:op-re "\\)"))
 ;; stringlit is referred to, but not defined Scala Language Specification 2.9
 ;; we define it as consisting of anything but '`' and newline
 (defconst scala-syntax:stringlit-re "[^`\n\r]+")
 (defconst scala-syntax:quotedid-re (concat "[`]" scala-syntax:stringlit-re "[`]"))
-(defconst scala-syntax:id-re (concat "\\(" scala-syntax:plainid-re
+(defconst scala-syntax:id-re (concat "\\(?:" scala-syntax:plainid-re
                               "\\|" scala-syntax:quotedid-re "\\)"))
 (defconst scala-syntax:id-first-char-group
   (concat scala-syntax:lower-group
@@ -143,11 +143,11 @@
 ;; Symbol literals (Chapter 1.3.7)
 (defconst scala-syntax:symbolLiteral-re
   ;; must end with non-' to not conflict with scala-syntax:characterLiteral-re
-  (concat "\\('" scala-syntax:plainid-re "\\)\\([^']\\|$\\)"))
+  (concat "\\('" scala-syntax:plainid-re "\\)\\(?:[^']\\|$\\)"))
 
 ;; Literals (Chapter 1.3)
 (defconst scala-syntax:literal-re
-  (concat "\\(" scala-syntax:integerLiteral-re
+  (concat "\\(?:" scala-syntax:integerLiteral-re
           "\\|" scala-syntax:floatingPointLiteral-re
           "\\|" scala-syntax:booleanLiteral-re
           "\\|" scala-syntax:characterLiteral-re
@@ -282,7 +282,7 @@ the levels, see `scala-syntax:parse-path' and
   "\#\!")
 
 (defconst scala-syntax:preamble-end-re
-  "\!\\(\#\\)[ \t]*$")
+  "\!\\(?:\#\\)[ \t]*$")
 
 (defconst scala-syntax:empty-line-re
   "^\\s *$")
@@ -291,35 +291,35 @@ the levels, see `scala-syntax:parse-path' and
   "/[/*]")
 
 (defconst scala-syntax:end-of-code-line-re
-  (concat "\\([ ]\\|$\\|" scala-syntax:comment-start-re "\\)")
+  (concat "\\(?:[ ]\\|$\\|" scala-syntax:comment-start-re "\\)")
   "A special regexp that can be concatenated to an other regular
   expression when used with scala-syntax:looking-back-token. Not
   meaningfull in other contexts.")
 
 (defconst scala-syntax:path-keywords-unsafe-re
-  (regexp-opt '("super" "this") 'words))
+  (regexp-opt '("super" "this") 'symbols))
 
 (defconst scala-syntax:path-keywords-re
-  (concat "\\(^\\|[^`]\\)\\(" scala-syntax:path-keywords-unsafe-re "\\)"))
+  (concat "\\(?:^\\|[^`]\\)\\(" scala-syntax:path-keywords-unsafe-re "\\)"))
 
 (defconst scala-syntax:value-keywords-unsafe-re
-  (regexp-opt '("false" "null" "true") 'words))
+  (regexp-opt '("false" "null" "true") 'symbols))
 
 (defconst scala-syntax:value-keywords-re
-  (concat "\\(^\\|[^`]\\)\\(" scala-syntax:value-keywords-unsafe-re "\\)"))
+  (concat "\\(?:^\\|[^`]\\)\\(" scala-syntax:value-keywords-unsafe-re "\\)"))
 
 (defconst scala-syntax:other-keywords-unsafe-re
   (regexp-opt '("abstract" "case" "catch" "class" "def" "do" "else" "extends"
                 "final" "finally" "for" "forSome" "if" "implicit" "import"
                 "lazy" "match" "new" "object" "override" "package" "private"
                 "protected" "return" "sealed" "throw" "trait" "try" "type"
-                "val" "var" "while" "with" "yield") 'words))
+                "val" "var" "while" "with" "yield") 'symbols))
 
 (defconst scala-syntax:other-keywords-re
-  (concat "\\(^\\|[^`]\\)\\(" scala-syntax:other-keywords-unsafe-re "\\)"))
+  (concat "\\(?:^\\|[^`]\\)\\(" scala-syntax:other-keywords-unsafe-re "\\)"))
 
 (defconst scala-syntax:keywords-unsafe-re
-  (concat "\\(" scala-syntax:path-keywords-unsafe-re
+  (concat "\\(?:" scala-syntax:path-keywords-unsafe-re
           "\\|" scala-syntax:value-keywords-unsafe-re
           "\\|" scala-syntax:other-keywords-unsafe-re
           "\\)"))
@@ -337,17 +337,17 @@ the levels, see `scala-syntax:parse-path' and
 
 (defconst scala-syntax:reserved-symbol-underscore-re
   ;; reserved symbol _
-  (concat "\\(^\\|[^" scala-syntax:letterOrDigit-group "]\\)"
+  (concat "\\(?:^\\|[^" scala-syntax:letterOrDigit-group "]\\)"
           "\\(_\\)"
-          "\\(" scala-syntax:after-reserved-symbol-underscore-re "\\)"))
+          "\\(?:" scala-syntax:after-reserved-symbol-underscore-re "\\)"))
 
 (defconst scala-syntax:reserved-symbols-unsafe-re
   ;; reserved symbols. The regexp is unsafe as it does not
   ;; check the context.
-  "\\([:#@\u21D2\u2190]\\|=>?\\|<[:%!?\\-]\\|>:\\)" )
+  "\\(?:[:#@\u21D2\u2190]\\|=>?\\|<[:%!?\\-]\\|>:\\)" )
 
 (defconst scala-syntax:double-arrow-unsafe-re
-  "\\(=>\\|\u21D2\\)")
+  "\\(?:=>\\|\u21D2\\)")
 
 (defconst scala-syntax:after-reserved-symbol-re
   (concat "\\(?:$\\|" scala-syntax:comment-start-re
@@ -355,29 +355,26 @@ the levels, see `scala-syntax:parse-path' and
 
 (defconst scala-syntax:reserved-symbols-re
   ;; reserved symbols and XML starts ('<!' and '<?')
-  (concat "\\(^\\|[^" scala-syntax:opchar-group "]\\)"
-          scala-syntax:reserved-symbols-unsafe-re
-          "\\(" scala-syntax:after-reserved-symbol-re "\\)"))
+  (concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
+          "\\(" scala-syntax:reserved-symbols-unsafe-re "\\)"
+          "\\(?:" scala-syntax:after-reserved-symbol-re "\\)"))
 
 (defconst scala-syntax:colon-re
   (concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
-          "\\(:\\)"
+          "\\(?::\\)"
           "\\(?:" scala-syntax:after-reserved-symbol-re "\\)"))
 
 (defconst scala-syntax:modifiers-re
   (regexp-opt '("override" "abstract" "final" "sealed" "implicit" "lazy"
-                "private" "protected") 'words))
+                "private" "protected") 'symbols))
 
 (defconst scala-syntax:body-start-re
   (concat "=" scala-syntax:end-of-code-line-re)
   "A regexp for detecting if a line ends with '='")
 
 (defconst scala-syntax:list-keywords-re
-  (regexp-opt '("var" "val" "import") 'words)
+  (regexp-opt '("var" "val" "import") 'symbols)
   ("Keywords that can start a list"))
-
-(defconst scala-syntax:multiLineStringLiteral-end-re
-  "\"\"+\\(\"\\)")
 
 (defconst scala-syntax:case-re
   "\\_<case\\_>")
@@ -386,7 +383,7 @@ the levels, see `scala-syntax:parse-path' and
   "\\_<for\\_>")
 
 (defconst scala-syntax:class-or-object-re
-  (regexp-opt '("class" "object") 'words))
+  (regexp-opt '("class" "object") 'symbols))
 
 
 ;;;;
@@ -591,12 +588,12 @@ symbol constituents (syntax 3)"
 ;;;;
 
 (defun scala-syntax:beginning-of-code-line ()
-  (interactive)
   "Move to the beginning of code on the line, or to the end of
 the line, if the line is empty. Return the new point.  Not to be
 called on a line whose start is inside a comment, i.e. a comment
 begins on the previous line and continues past the start of this
 line."
+  (interactive)
   ;; TODO: make it work even if the start IS inside a comment
   (beginning-of-line)
   (let ((eol (line-end-position))

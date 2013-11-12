@@ -19,18 +19,47 @@ scala-mode has been reloaded."
   :type '(repeat string)
   :group 'scala)
 
+(defconst scala-font-lock:mustBeContinued-keywords-re
+  (regexp-opt '("case" "class" "def" "extends" "new" "object" "package" "trait" 
+                "type" "val" "var" "with") 'words))
+
+(defconst scala-font-lock:mustBeContinued-line-end-re
+  (concat "\\(" scala-font-lock:mustBeContinued-keywords-re
+          "\\|:" scala-syntax:end-of-code-line-re "\\)")
+  "All keywords and symbols that cannot terminate a expression
+and are infact a sign of run-on. Reserved-symbols not included.")
+
+(defconst scala-font-lock:string-interpolation-start-re
+  (concat "\\$\\(?:\\(" scala-syntax:alphaid-re "\\)\\|\\({\\)\\)")
+  "Start of a string interpolation variable or block")
+
+(defun scala-font-lock:extend-after-change-region-function (beg end old-len)
+  "Find a safe region to font-lock" nil
+  (save-excursion
+    (save-match-data
+      (goto-char beg)
+      (forward-line 0)
+      (while (scala-syntax:looking-back-token scala-font-lock:mustBeContinued-line-end-re)
+        (forward-line -1))
+      (setq beg (point))
+      (goto-char end)
+      (end-of-line)
+      (while (and (/= (point) (point-max))
+                  (scala-syntax:looking-back-token scala-font-lock:mustBeContinued-line-end-re))
+        (forward-line 1)
+        (end-of-line))
+      (cons beg (point)))))
+
 (defun scala-font-lock:create-user-constant-re ()
-  (regexp-opt scala-font-lock:constant-list 'words))
+  (regexp-opt scala-font-lock:constant-list 'symbols))
 
 (defun scala-font-lock:mark-reserved-symbols (limit)
   (when (re-search-forward scala-syntax:reserved-symbols-re limit t)
-      (goto-char (match-end 2)))) ;; step back to the match (re matches futher)
+      (goto-char (match-end 1)))) ;; step back to the match (re matches futher)
 
 (defun scala-font-lock:mark-underscore (limit)
   (when (re-search-forward scala-syntax:reserved-symbol-underscore-re limit t)
-      (goto-char (match-end 2)))) ;; step back to the match (re matches futher)
-
-;(defun scala-font-lock:extend-region-function ()
+      (goto-char (match-end 1)))) ;; step back to the match (re matches futher)
 
 (defun scala-font-lock:limit-pattern2 (&optional start)
   (save-excursion
@@ -38,6 +67,7 @@ scala-mode has been reloaded."
     (scala-syntax:skip-forward-ignorable)
     (ignore-errors
       (while (and (not (or (eobp)
+                           (nth 8 (syntax-ppss))
                            (looking-at scala-syntax:other-keywords-unsafe-re)
                            (scala-syntax:looking-at-reserved-symbol nil)))
                   (scala-syntax:looking-at-simplePattern-beginning))
@@ -67,11 +97,12 @@ scala-mode has been reloaded."
     (point)))
 
 (defun scala-font-lock:limit-pattern2-list (&optional start)
-  (let ((limit (scala-font-lock:limit-pattern2 start)))
-    (while (= (char-after limit) ?,)
-      (setq limit (scala-font-lock:limit-pattern2 (1+ limit))))
+  (unless (nth 8 (syntax-ppss))
+    (let ((limit (scala-font-lock:limit-pattern2 start)))
+      (while (= (char-after limit) ?,)
+        (setq limit (scala-font-lock:limit-pattern2 (1+ limit))))
 ;    (message "list limit at %s" limit)
-    limit))
+      limit)))
 
 (defun scala-font-lock:mark-pattern1-part (&optional limit pattern-p)
   "Parses a part of val, var and case pattern (or id). Always
@@ -90,9 +121,10 @@ Does not continue past limit.
 "
 ;  (message "will stop at %d" limit)
   (cond
-   ;; quit if we are past limit
+   ;; quit if we are past limit or in a comment or string
    ((or (and limit (>= (point) limit))
-        (eobp))
+        (eobp)
+        (nth 8 (syntax-ppss)))
 ;    (message "at limit %s" (point))
     nil)
    ;; Type pattern, just skip the whole thing. It will end at ',' or ')'.
@@ -198,23 +230,23 @@ Does not continue past limit.
 ))
 
 (defun scala-font-lock:limit-pattern (&optional start)
-  (save-excursion
-    (goto-char (scala-font-lock:limit-pattern2 start))
-;    (message "now at %d" (point))
-    (when (scala-syntax:looking-at-reserved-symbol ":")
-      (while (not (or (eobp)
-                      (scala-syntax:looking-at-reserved-symbol "|")
-                      (scala-syntax:looking-at-reserved-symbol
-                       scala-syntax:double-arrow-unsafe-re)
-                      (scala-syntax:looking-at-empty-line-p)))
-        (scala-syntax:forward-sexp)
-        (scala-syntax:skip-forward-ignorable)))
-    (if (or (/= (char-after) ?|)
-            (scala-syntax:looking-at-reserved-symbol
-             scala-syntax:double-arrow-unsafe-re))
-        (point)
-      (forward-char)
-      (scala-font-lock:limit-pattern))))
+  (unless (nth 8 (syntax-ppss))
+    (save-excursion
+      (goto-char (scala-font-lock:limit-pattern2 start))
+      (when (scala-syntax:looking-at-reserved-symbol ":")
+        (while (not (or (eobp)
+                        (scala-syntax:looking-at-reserved-symbol "|")
+                        (scala-syntax:looking-at-reserved-symbol
+                         scala-syntax:double-arrow-unsafe-re)
+                        (scala-syntax:looking-at-empty-line-p)))
+          (scala-syntax:forward-sexp)
+          (scala-syntax:skip-forward-ignorable)))
+      (if (or (/= (char-after) ?|)
+              (scala-syntax:looking-at-reserved-symbol
+               scala-syntax:double-arrow-unsafe-re))
+          (point)
+        (forward-char)
+        (scala-font-lock:limit-pattern)))))
 
 (defun scala-font-lock:mark-pattern-part (&optional limit)
   (when (scala-syntax:looking-at-reserved-symbol "|")
@@ -223,87 +255,112 @@ Does not continue past limit.
     (scala-syntax:skip-forward-ignorable))
   (scala-font-lock:mark-pattern1-part limit t))
 
-(defun scala-font-lock:limit-type (&optional start)
-  start)
 
+;; (defun scala-font-lock:limit-simpleType (&optional start)
+;;   (when start (goto-char start))
+;;   (scala-syntax:skip-forward-ignorable)
+;;   (setq start (point))
 
-(defun scala-font-lock:limit-simpleType (&optional start)
-  (when start (goto-char start))
-  (scala-syntax:skip-forward-ignorable)
-  (setq start (point))
+;;   (if (= (char-after) ?\()
+;;       (ignore-errors (forward-list))
+;;     (scala-font-lock:mark-simpleType))
+;;   (when (and (not (eobp)) (= (char-after) ?#))
+;;     (scala-font-lock:mark-simpleType))
+;;   (when (and (not (eobp)) (= (char-after) ?\[))
+;;     (ignore-errors (forward-list))
+;;     (scala-syntax:skip-forward-ignorable))
+;;   (let ((limit (point)))
+;;     (goto-char start)
+;; ;    (message "simpeType limit at %d" limit)
+;;     limit))
 
-  (if (= (char-after) ?\()
-      (ignore-errors (forward-list))
-    (scala-font-lock:mark-simpleType))
-  (when (and (not (eobp)) (= (char-after) ?#))
-    (scala-font-lock:mark-simpleType))
-  (when (and (not (eobp)) (= (char-after) ?\[))
-    (ignore-errors (forward-list))
-    (scala-syntax:skip-forward-ignorable))
-  (let ((limit (point)))
-    (goto-char start)
-;    (message "simpeType limit at %d" limit)
-    limit))
-
-(defun scala-font-lock:mark-simpleType (&optional limit)
-;  (message "looking for simpleType at %d" (point))
-  (cond
-   ;; stop at limit
-   ((and limit (>= (point) limit))
-    nil)
-   ;; just dive into lists
-   ((> (skip-chars-forward "[(,)]") 0)
-;    (message "skipping list-marks")
-    (scala-syntax:skip-forward-ignorable)
-    (set-match-data nil)
-    t)
-   ;; jump over blocks
-   ((= (char-after) ?\{)
-    (ignore-errors
-      (forward-list)
-      (set-match-data nil)
-      t))
-   ;; ignore arrows and reserved words and symbols
-   ((or (scala-syntax:looking-at-reserved-symbol
-         scala-syntax:double-arrow-unsafe-re)
-        (scala-syntax:looking-at-reserved-symbol
-         "<[:%]\\|>?:")
-        (looking-at "\\_<forSome\\>"))
-;    (message "skipping reserved")
-    (goto-char (match-end 0))
-    (scala-syntax:skip-forward-ignorable)
-    (set-match-data nil)
-    t)
-   ;; color id after '#'
-   ((= (char-after) ?#)
-;    (message "at #")
-    (forward-char)
-    (if (and (not (or (looking-at scala-syntax:keywords-unsafe-re)
-                      (scala-syntax:looking-at-reserved-symbol nil)))
-             (looking-at scala-syntax:id-re))
-        (goto-char (match-end 0)) nil))
-   ;; color paths (including stableid)
-   ((scala-syntax:looking-at-path)
-;    (message "at path")
-    (let ((end (match-end 0)))
-      (goto-char end)
-      (while (scala-syntax:looking-back-token "this\\|type")
-        (goto-char (match-beginning 0))
-        (skip-chars-backward "."))
-      (unless (scala-syntax:looking-back-token scala-syntax:id-re)
-        (set-match-data nil))
-      (goto-char end))
-    (scala-syntax:skip-forward-ignorable)
-    t)
-   (t
-;    (message "Cannot continue simpleType at %d" (point))
-    nil)))
+;; (defun scala-font-lock:mark-simpleType (&optional limit)
+;; ;  (message "looking for simpleType at %d" (point))
+;;   (cond
+;;    ;; stop at limit
+;;    ((and limit (>= (point) limit))
+;;     nil)
+;;    ;; just dive into lists
+;;    ((> (skip-chars-forward "[(,)]") 0)
+;; ;    (message "skipping list-marks")
+;;     (scala-syntax:skip-forward-ignorable)
+;;     (set-match-data nil)
+;;     t)
+;;    ;; jump over blocks
+;;    ((= (char-after) ?\{)
+;;     (ignore-errors
+;;       (forward-list)
+;;       (set-match-data nil)
+;;       t))
+;;    ;; ignore arrows and reserved words and symbols
+;;    ((or (scala-syntax:looking-at-reserved-symbol
+;;          scala-syntax:double-arrow-unsafe-re)
+;;         (scala-syntax:looking-at-reserved-symbol
+;;          "<[:%]\\|>?:")
+;;         (looking-at "\\_<forSome\\>"))
+;; ;    (message "skipping reserved")
+;;     (goto-char (match-end 0))
+;;     (scala-syntax:skip-forward-ignorable)
+;;     (set-match-data nil)
+;;     t)
+;;    ;; color id after '#'
+;;    ((= (char-after) ?#)
+;; ;    (message "at #")
+;;     (forward-char)
+;;     (if (and (not (or (looking-at scala-syntax:keywords-unsafe-re)
+;;                       (scala-syntax:looking-at-reserved-symbol nil)))
+;;              (looking-at scala-syntax:id-re))
+;;         (goto-char (match-end 0)) nil))
+;;    ;; color paths (including stableid)
+;;    ((scala-syntax:looking-at-path)
+;; ;    (message "at path")
+;;     (let ((end (match-end 0)))
+;;       (goto-char end)
+;;       (while (scala-syntax:looking-back-token "this\\|type")
+;;         (goto-char (match-beginning 0))
+;;         (skip-chars-backward "."))
+;;       (unless (scala-syntax:looking-back-token scala-syntax:id-re)
+;;         (set-match-data nil))
+;;       (goto-char end))
+;;     (scala-syntax:skip-forward-ignorable)
+;;     t)
+;;    (t
+;; ;    (message "Cannot continue simpleType at %d" (point))
+;;     nil)))
 
 (defun scala-font-lock:mark-string-escapes (limit)
   (when (re-search-forward scala-syntax:string-escape-re limit t)
-    (goto-char (match-end 0))
     (or (eq (nth 3 (save-excursion (syntax-ppss (match-beginning 0)))) ?\")
         (scala-font-lock:mark-string-escapes limit))))
+
+(defun scala-font-lock:mark-string-interpolation (limit)
+  (when (re-search-forward scala-font-lock:string-interpolation-start-re limit t)
+;    (message "found $ %s %s" (match-beginning 0) (point))
+    ;; now we have to consider the following:
+    ;; - are we in a string (nth 3 syntax-ppps) is non-nill, if not continue search
+    ;; - are we in a ${} block, if so, mark to end of block (can be nested)
+    (let ((syntax (syntax-ppss))
+          (beg (match-beginning 0)))
+      (if (or (null (nth 3 syntax))
+              (not (save-excursion 
+                     (goto-char (nth 8 syntax))
+                     (skip-syntax-backward "w_")
+                     (looking-at-p scala-syntax:alphaid-re))))
+          (scala-font-lock:mark-string-interpolation limit) ;; not in string-interpolation
+        (or (match-beginning 1) ;; alphaId
+            (progn              ;; block
+              ;; first thing: decide where to stop searching for the end of the block
+              (save-excursion
+                (setq limit 
+                      (if (characterp (nth 3 syntax)) 
+                          (min limit (point-at-eol))
+                        (if (re-search-forward "\"\"\"" limit t)
+                            (min limit (point))
+                          limit))))
+              (parse-partial-sexp beg limit 0)
+              (set-match-data (list beg (point)))
+              t))))))
+
 
 (defun scala-font-lock:mark-numberLiteral (re limit)
   (when (re-search-forward re limit t)
@@ -328,53 +385,55 @@ Does not continue past limit.
   ;; syntax propertize
 
   `(;; keywords
-    (,scala-syntax:other-keywords-re 2 font-lock-keyword-face)
-    (,scala-syntax:value-keywords-re 2 font-lock-constant-face)
-    (,scala-syntax:path-keywords-re 2 font-lock-keyword-face)
+    (,scala-syntax:other-keywords-re 1 font-lock-keyword-face)
+    (,scala-syntax:value-keywords-re 1 font-lock-constant-face)
+    (,scala-syntax:path-keywords-re 1 font-lock-keyword-face)
 
     ;; User defined constants
-    (,(scala-font-lock:create-user-constant-re) 0 font-lock-constant-face)
+    (,(scala-font-lock:create-user-constant-re) . font-lock-constant-face)
 
     ;; Annotations
     (,(rx (and "@" (in "a-zA-Z_.") (0+ (in "a-zA-Z0-9_."))))
      . font-lock-preprocessor-face)
 
     ;; reserved symbols
-    (scala-font-lock:mark-reserved-symbols 2 font-lock-keyword-face)
+    (scala-font-lock:mark-reserved-symbols 1 font-lock-keyword-face)
 
     ;; 'Symbols
     (,scala-syntax:symbolLiteral-re 1 font-lock-string-face)
 
     ;; underscore
-    (scala-font-lock:mark-underscore 2 font-lock-keyword-face)
+    (scala-font-lock:mark-underscore 1 font-lock-keyword-face)
 
     ;; escapes inside strings
-    (scala-font-lock:mark-string-escapes (0 font-lock-constant-face prepend nil))
+    (scala-font-lock:mark-string-escapes (0 font-lock-keyword-face prepend nil))
+
+    ;; string interpolation
+    (scala-font-lock:mark-string-interpolation (0 font-lock-preprocessor-face prepend nil))
 
     ;; `object'
-    (,(concat "\\_<object[ \t]+\\("
-              scala-syntax:id-re
-              "\\)")
+    (,(concat "\\_<object[ \t\n]+\\(" scala-syntax:id-re "\\)")
      1 font-lock-constant-face)
 
-    ;; `class', `trait', `extends', `new' or `with' followed by type
-    (,(concat "\\_<\\(?:class\\|trait\\|extends\\|with\\|new\\)[ \t]+\\("
-              scala-syntax:id-re
-              "\\)")
+    ;; `type', `class', `trait', `extends', `new' or `with' followed by type
+    (,(concat "\\_<\\(?:type\\|class\\|trait\\|extends\\|with\\|new\\)[ \t\n]+"
+              "\\(" scala-syntax:id-re "\\)")
      1 font-lock-type-face)
 
     ;; `package' name
-    (,(concat "\\_<package[ \t]+\\(\\"
-              "(?:" scala-syntax:varid-re ".\\)*" 
-              scala-syntax:varid-re "\\)")
-     (1 font-lock-string-face))
+    (,(concat "\\_<package[ \t\n]+\\(\\" 
+              "(?:" scala-syntax:varid-re ".\\)*" scala-syntax:varid-re "\\)")
+     1 font-lock-string-face)
 
+    ;; `def'
+    (,(concat "\\_<def[ \t\n]+\\(" scala-syntax:id-re "\\)") 
+     1 font-lock-function-name-face)
 
     ;; colon followed by id-re. 
     ;; TODO: we need to extend the font-lock region to next line when the line ends with :
     (,(concat "\\(?:^\\|[^" scala-syntax:opchar-group "]\\)"
               "\\(?::\\)[ \t\n]*"
-              "\\(" scala-syntax:after-reserved-symbol-re scala-syntax:id-re "\\)")
+              "\\(\\_<" scala-syntax:id-re "\\_>\\)")
      1 font-lock-type-face)
 
     ;; ;; extends, with, new
@@ -392,8 +451,6 @@ Does not continue past limit.
     ;;                                   nil
     ;;                                   (0 font-lock-type-face nil t)))
 
-    ;; def
-    (,(concat "\\_<def[ \t]+\\(" scala-syntax:id-re "\\)") 1 font-lock-function-name-face)
 
     ;; VarDcl
     ("\\_<val[ \t]+\\([^:]\\)"

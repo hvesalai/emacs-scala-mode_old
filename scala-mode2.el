@@ -91,6 +91,7 @@ When started, runs `scala-mode-hook'.
    'post-self-insert-hook
    'syntax-propertize-function
    'font-lock-syntactic-face-function
+   'font-lock-extend-after-change-region-function
    'font-lock-defaults
    'paragraph-start
    'paragraph-separate
@@ -116,10 +117,9 @@ When started, runs `scala-mode-hook'.
         parse-sexp-lookup-properties    t
 
         ;; TODO: font-lock
-        font-lock-defaults              '(scala-font-lock:keywords
-                                          nil)
+        font-lock-defaults              '(scala-font-lock:keywords nil)
         font-lock-syntactic-face-function 'scala-font-lock:syntactic-face-function
-
+        font-lock-extend-after-change-region-function 'scala-font-lock:extend-after-change-region-function
         ;; TODO: beginning-of-defun-function, end-of-defun-function
 
         ;; comments
