@@ -526,7 +526,7 @@ characters and one-line strings will not be fontified."
                ;; empty string at line end
                (= (match-end 9) (line-end-position))
                ;; no " after empty string
-               (not (= (char-after (match-end 10)) ?\")))
+               (not (= (char-after (match-end 9)) ?\")))
               (when (save-excursion
                       (goto-char (match-beginning 7))
                       ;; really valid?
