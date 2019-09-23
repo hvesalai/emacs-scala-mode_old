@@ -1,6 +1,6 @@
-# scala-mode2 — A new scala-mode for emacs
+# scala-mode2 — The scala-mode for emacs
 
-This is a new scala major mode for emacs 24. It is a complete rewrite
+This is a new scala major mode for emacs 24 or newer. It is
 based on the *Scala Language Specification 2.9*.
 
 The mode intends to provide the basic emacs support, including
